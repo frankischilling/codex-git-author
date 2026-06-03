@@ -2,6 +2,10 @@
 
 Commit Author Guard is a Codex plugin that keeps git commits authored as the configured git user, or as the authenticated GitHub CLI account when git config is incomplete.
 
+An example GitHub repository that shows it in use is available below: 
+
+`https://github.com/frankischilling/codex-skill-test-repo`
+
 The plugin provides the `git-commit-author` skill and a bundled helper:
 
 ```bash
