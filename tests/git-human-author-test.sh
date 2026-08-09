@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2030,SC2031
 set -euo pipefail
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 SCRIPT="$ROOT_DIR/skills/git-commit-author/scripts/git-human-author.sh"
 FAILED=0
+TEST_GLOBAL_CONFIG=$(mktemp)
+trap 'rm -f "$TEST_GLOBAL_CONFIG"' EXIT
+export GIT_CONFIG_GLOBAL="$TEST_GLOBAL_CONFIG"
 
 fail() {
   printf 'not ok - %s\n' "$1" >&2
@@ -47,7 +51,20 @@ fake_gh_bin() {
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ ${1:-} == "api" && ${2:-} == "user" ]]; then
+if [[ ${1:-} == "auth" && ${2:-} == "status" ]]; then
+  if [[ ${3:-} == "--help" ]]; then
+    printf 'usage: gh auth status [flags]\n'
+    if [[ ${FAKE_GH_SUPPORTS_ACTIVE:-0} == 1 ]]; then
+      printf '  --active  display the active account only\n'
+    fi
+    exit 0
+  fi
+  if [[ -n ${FAKE_GH_AUTH_LOG:-} ]]; then
+    printf '%s\n' "$*" >>"$FAKE_GH_AUTH_LOG"
+  fi
+  [[ ${FAKE_GH_AUTH_FAIL:-0} != 1 ]]
+  exit
+elif [[ ${1:-} == "api" && ${2:-} == "user" ]]; then
   case "${4:-}" in
     ".name // .login // empty") printf 'FrankHub\n' ;;
     ".email // empty") printf '\n' ;;
@@ -138,6 +155,75 @@ test_github_cli_fallback_identity() {
 
   grep -qx 'name=FrankHub' <<<"$output" || return 1
   grep -qx 'email=12345+frankhub@users.noreply.github.com' <<<"$output"
+}
+
+test_github_cli_fallback_checks_compatible_auth_status() {
+  local tmp repo log
+  tmp=$(mktemp -d)
+  mkdir -p "$tmp/home" "$tmp/config"
+  fake_gh_bin "$tmp"
+  repo="$tmp/repo"
+  log="$tmp/auth.log"
+  git init -q "$repo"
+
+  (
+    cd "$repo"
+    HOME="$tmp/home" XDG_CONFIG_HOME="$tmp/config" PATH="$tmp/bin:$PATH" \
+      FAKE_GH_AUTH_LOG="$log" "$SCRIPT" resolve >/dev/null
+  )
+
+  grep -qx 'auth status --hostname github.com' "$log"
+}
+
+test_github_cli_fallback_uses_active_when_supported() {
+  local tmp repo log
+  tmp=$(mktemp -d)
+  mkdir -p "$tmp/home" "$tmp/config"
+  fake_gh_bin "$tmp"
+  repo="$tmp/repo"
+  log="$tmp/auth.log"
+  git init -q "$repo"
+
+  (
+    cd "$repo"
+    HOME="$tmp/home" XDG_CONFIG_HOME="$tmp/config" PATH="$tmp/bin:$PATH" \
+      FAKE_GH_AUTH_LOG="$log" FAKE_GH_SUPPORTS_ACTIVE=1 "$SCRIPT" resolve >/dev/null
+  )
+
+  grep -qx 'auth status --active --hostname github.com' "$log"
+}
+
+test_github_cli_fallback_uses_configured_host() {
+  local tmp repo log
+  tmp=$(mktemp -d)
+  mkdir -p "$tmp/home" "$tmp/config"
+  fake_gh_bin "$tmp"
+  repo="$tmp/repo"
+  log="$tmp/auth.log"
+  git init -q "$repo"
+
+  (
+    cd "$repo"
+    HOME="$tmp/home" XDG_CONFIG_HOME="$tmp/config" PATH="$tmp/bin:$PATH" \
+      FAKE_GH_AUTH_LOG="$log" GH_HOST=git.example.test "$SCRIPT" resolve >/dev/null
+  )
+
+  grep -qx 'auth status --hostname git.example.test' "$log"
+}
+
+test_github_cli_fallback_rejects_failed_authentication() {
+  local tmp repo
+  tmp=$(mktemp -d)
+  mkdir -p "$tmp/home" "$tmp/config"
+  fake_gh_bin "$tmp"
+  repo="$tmp/repo"
+  git init -q "$repo"
+
+  (
+    cd "$repo"
+    ! HOME="$tmp/home" XDG_CONFIG_HOME="$tmp/config" PATH="$tmp/bin:$PATH" \
+      FAKE_GH_AUTH_FAIL=1 "$SCRIPT" resolve >/dev/null 2>&1
+  )
 }
 
 test_install_repo_hook_blocks_codex_plain_commit() {
@@ -250,6 +336,10 @@ run_case "env output uses git config" test_env_output_uses_git_config
 run_case "commit uses git config identity" test_commit_uses_git_config_identity
 run_case "amend removes codex author" test_amend_removes_codex_author
 run_case "github cli fallback identity" test_github_cli_fallback_identity
+run_case "github cli fallback checks compatible auth status" test_github_cli_fallback_checks_compatible_auth_status
+run_case "github cli fallback uses active when supported" test_github_cli_fallback_uses_active_when_supported
+run_case "github cli fallback uses configured host" test_github_cli_fallback_uses_configured_host
+run_case "github cli fallback rejects failed authentication" test_github_cli_fallback_rejects_failed_authentication
 run_case "install repo hook blocks codex plain commit" test_install_repo_hook_blocks_codex_plain_commit
 run_case "install repo hook allows human plain commit" test_install_repo_hook_allows_human_plain_commit
 run_case "install repo hook configures from github" test_install_repo_hook_configures_from_github

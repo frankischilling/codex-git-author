@@ -18,7 +18,7 @@ Commands:
   commit            Run git commit with the resolved identity.
   amend-head        Amend HEAD with the resolved identity.
 
-Identity order: repo git config, global git config, then authenticated GitHub CLI.
+Identity order: repo git config, global git config, then the active GitHub CLI account.
 USAGE
 }
 
@@ -88,6 +88,20 @@ gh_user_field() {
   gh api user --jq "$jq_expr" 2>/dev/null | first_line
 }
 
+check_gh_account() {
+  command_exists gh || return 1
+  local auth_help hostname login
+  hostname=${GH_HOST:-github.com}
+  auth_help=$(gh auth status --help 2>&1 || true)
+  if [[ $auth_help == *--active* ]]; then
+    gh auth status --active --hostname "$hostname" >/dev/null 2>&1 || return 1
+  else
+    gh auth status --hostname "$hostname" >/dev/null 2>&1 || return 1
+  fi
+  login=$(gh_user_field '.login // empty' || true)
+  valid_identity_value "$login"
+}
+
 resolve_gh_name() {
   local value
   value=$(gh_user_field '.name // .login // empty' || true)
@@ -129,17 +143,19 @@ resolve_gh_email() {
   return 1
 }
 
-resolve_name() {
-  resolve_git_value user.name || resolve_gh_name
-}
-
-resolve_email() {
-  resolve_git_value user.email || resolve_gh_email
-}
-
 resolve_identity() {
-  AUTHOR_NAME=$(resolve_name || true)
-  AUTHOR_EMAIL=$(resolve_email || true)
+  AUTHOR_NAME=$(resolve_git_value user.name || true)
+  AUTHOR_EMAIL=$(resolve_git_value user.email || true)
+
+  if ! valid_identity_value "$AUTHOR_NAME" || ! valid_identity_value "$AUTHOR_EMAIL"; then
+    check_gh_account || die "could not verify an active GitHub CLI account for ${GH_HOST:-github.com}"
+    if ! valid_identity_value "$AUTHOR_NAME"; then
+      AUTHOR_NAME=$(resolve_gh_name || true)
+    fi
+    if ! valid_identity_value "$AUTHOR_EMAIL"; then
+      AUTHOR_EMAIL=$(resolve_gh_email || true)
+    fi
+  fi
 
   valid_identity_value "$AUTHOR_NAME" || die "could not resolve a non-Codex author name"
   valid_identity_value "$AUTHOR_EMAIL" || die "could not resolve a non-Codex author email"
