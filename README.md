@@ -63,14 +63,16 @@ bash /home/frank/plugins/author-plugin/skills/git-commit-author/scripts/git-huma
 
 This sets global `core.hooksPath`, so future normal `git commit` commands are checked in any repo that uses the global Git config.
 
-### Use GitHub CLI Fallback
+### Use GitHub CLI fallback
 
-If git config is missing, the helper can resolve your identity from the logged-in GitHub CLI account:
+If git config is missing, the helper verifies the active GitHub CLI account and resolves your identity from it:
 
 ```bash
 gh auth status
 bash /home/frank/plugins/author-plugin/skills/git-commit-author/scripts/git-human-author.sh resolve
 ```
+
+The authentication check works with `gh` versions that do not support `gh auth status --active`. The helper uses `github.com` unless `GH_HOST` names another host.
 
 If GitHub does not expose a public email, the helper uses GitHub's noreply address format:
 
@@ -98,7 +100,7 @@ git log --format='%h %an <%ae> | %cn <%ce> | %s' --max-count=5
 
 No committed author or committer should contain `Codex`, `OpenAI`, or `ChatGPT`.
 
-### Force A Safe Commit From A Polluted Environment
+### Force a safe commit from a polluted environment
 
 Hooks can block a polluted plain `git commit`, but they cannot rewrite the parent command's environment. When you need the commit to proceed anyway, use the helper's commit command:
 
@@ -110,7 +112,7 @@ GIT_COMMITTER_EMAIL=codex@openai.com \
 bash /home/frank/plugins/author-plugin/skills/git-commit-author/scripts/git-human-author.sh commit -m "safe author"
 ```
 
-### Fix The Latest Bad Commit
+### Fix the latest bad commit
 
 If `HEAD` is the only commit that has a bad author, amend it:
 

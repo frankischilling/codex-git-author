@@ -9,6 +9,8 @@ description: Use when making, amending, or checking git commits in Codex and the
 
 Use this skill whenever Codex is about to create, amend, or protect git commits. The commit author and committer must come from the repository/global git config, or from the authenticated GitHub CLI account when git config is incomplete.
 
+When GitHub CLI fallback is needed, the helper verifies the active account before reading its profile. It supports `gh` versions with and without `gh auth status --active`. Set `GH_HOST` when the account is hosted somewhere other than `github.com`.
+
 ## Workflow
 
 1. Work from inside the target git repository.
@@ -46,7 +48,7 @@ bash "<path-to-skill>/scripts/git-human-author.sh" amend-head
 
 Use `configure-local` only when the user wants this repo's `user.name` and `user.email` written from the resolved identity.
 
-## Identity Order
+## Identity order
 
 - Current repository git config: `user.name`, `user.email`
 - Global git config
@@ -54,7 +56,9 @@ Use `configure-local` only when the user wants this repo's `user.name` and `user
 
 The helper ignores `GIT_AUTHOR_*` and `GIT_COMMITTER_*` values that contain `codex`, `openai`, or `chatgpt`. If no human identity is available, stop and ask the user to configure git or authenticate `gh`.
 
-## Hook Behavior
+This skill does not publish hosted changes. Use `git-human-workflow` for guarded `gh` commands when that skill is available.
+
+## Hook behavior
 
 - `install-repo-hook` writes `.git/hooks/pre-commit` for the current repo and configures local `user.name` and `user.email` from the resolved identity when needed.
 - `install-global-hook` writes a global pre-commit hook under `${XDG_CONFIG_HOME:-$HOME/.config}/codex-author-plugin/git-hooks` and configures global `user.name` and `user.email` from the resolved identity when needed.
