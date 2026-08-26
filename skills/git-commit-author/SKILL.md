@@ -1,74 +1,70 @@
 ---
 name: git-commit-author
-description: Use when making, amending, or checking git commits in Codex and the commit author must be the configured git user or authenticated GitHub account rather than Codex/OpenAI.
+description: Keep Git commit authors and committers set to the configured Git user or authenticated GitHub account. Use when creating or amending commits, installing identity guards, handling polluted Git identity variables, or working with hooks in linked worktrees.
 ---
 
 # Git Commit Author
 
-## Overview
+Use this skill to create, amend, or guard commits with the repository user's identity. Resolve the name and email from repository configuration, global configuration, then the authenticated GitHub CLI account.
 
-Use this skill whenever Codex is about to create, amend, or protect git commits. The commit author and committer must come from the repository/global git config, or from the authenticated GitHub CLI account when git config is incomplete.
+## Compose with Git Human Workflow
 
-When GitHub CLI fallback is needed, the helper verifies the active account before reading its profile. It supports `gh` versions with and without `gh auth status --active`. Set `GH_HOST` when the account is hosted somewhere other than `github.com`.
+If `git-human-workflow` is active, use its helper for every Git and GitHub command, including `git commit`. It already forces the resolved author and committer and also checks public text. Do not nest the two commit helpers.
 
-## Workflow
+An existing Git Commit Author hook may stay installed. Git Human Workflow backs it up and chains it. On a new setup that uses both skills, install only Git Human Workflow's repository hooks.
 
-1. Work from inside the target git repository.
-2. Prefer installing the guard once for the repo:
+Follow the standalone workflow below when Git Human Workflow is not active.
 
-```bash
-bash "<path-to-skill>/scripts/git-human-author.sh" install-repo-hook
-```
+## Standalone workflow
 
-3. To protect every repo that uses the user's global Git config, install the global hook:
+Work from inside the target repository and use the canonical helper name:
 
 ```bash
-bash "<path-to-skill>/scripts/git-human-author.sh" install-global-hook
+bash "<skill-path>/scripts/git-commit-author.sh" check
+bash "<skill-path>/scripts/git-commit-author.sh" commit -m "Update the guide"
 ```
 
-This sets global `core.hooksPath` to the plugin-managed hook directory. If another global hooks path already exists, the plugin stores it in `authorPlugin.previousHooksPath` and chains its `pre-commit` hook when possible.
+The `commit` command accepts normal `git commit` arguments and forces the resolved identity. Use it when hooks are absent or identity environment variables may be polluted.
 
-4. Before committing without an installed hook, run:
+Install a repository guard when plain Git commands also need protection:
 
 ```bash
-bash "<path-to-skill>/scripts/git-human-author.sh" check
+bash "<skill-path>/scripts/git-commit-author.sh" install-repo-hook
 ```
 
-5. Create commits through the helper when you need the command itself to force the resolved identity, passing normal `git commit` arguments after `commit`:
+The installer resolves the active hooks directory, including the shared directory used by linked worktrees. It backs up and chains an existing pre-commit hook. Reinstalling the guard preserves that chain.
+
+Install a global guard only when the user asks to protect repositories through global Git configuration:
 
 ```bash
-bash "<path-to-skill>/scripts/git-human-author.sh" commit -m "your message"
+bash "<skill-path>/scripts/git-commit-author.sh" install-global-hook
 ```
 
-6. If the latest commit was authored as Codex/OpenAI, amend only `HEAD` through:
+Use `configure-local` only when the user wants the resolved name and email written to the repository's Git configuration.
+
+If `HEAD` alone has the wrong author, amend it with:
 
 ```bash
-bash "<path-to-skill>/scripts/git-human-author.sh" amend-head
+bash "<skill-path>/scripts/git-commit-author.sh" amend-head
 ```
 
-Use `configure-local` only when the user wants this repo's `user.name` and `user.email` written from the resolved identity.
+Rewriting commits older than `HEAD` requires explicit user approval.
 
-## Identity order
+## Identity and hook behavior
 
-- Current repository git config: `user.name`, `user.email`
-- Global git config
-- GitHub CLI account from `gh api user` and `gh api user/emails`
+- Identity order is repository Git configuration, global Git configuration, then `gh api user` and `gh api user/emails`.
+- Before using GitHub fallback, the helper verifies the active account. It supports CLI versions with and without `gh auth status --active`, and uses `GH_HOST` when set.
+- The helper ignores identity values containing `codex`, `openai`, or `chatgpt`. If no human identity is available, ask the user to configure Git or authenticate `gh`.
+- Repository and global hooks block commits whose effective author or committer contains a prohibited identity value.
+- Hooks cannot rewrite the parent `git commit` environment. Use the helper's `commit` command when the commit must proceed.
+- The global hook lives under `${XDG_CONFIG_HOME:-$HOME/.config}/git-commit-author/git-hooks`. It preserves an earlier global hooks path in `gitCommitAuthor.previousHooksPath` and chains its pre-commit hook.
+- `uninstall-global-hook` restores that earlier path or removes the managed `core.hooksPath` setting.
 
-The helper ignores `GIT_AUTHOR_*` and `GIT_COMMITTER_*` values that contain `codex`, `openai`, or `chatgpt`. If no human identity is available, stop and ask the user to configure git or authenticate `gh`.
-
-This skill does not publish hosted changes. Use `git-human-workflow` for guarded `gh` commands when that skill is available.
-
-## Hook behavior
-
-- `install-repo-hook` writes `.git/hooks/pre-commit` for the current repo and configures local `user.name` and `user.email` from the resolved identity when needed.
-- `install-global-hook` writes a global pre-commit hook under `${XDG_CONFIG_HOME:-$HOME/.config}/codex-author-plugin/git-hooks` and configures global `user.name` and `user.email` from the resolved identity when needed.
-- Installed hooks block commits whose author or committer identity resolves to Codex/OpenAI/ChatGPT.
-- Git hooks cannot rewrite the parent `git commit` process environment; they block bad identity commits instead. Use the helper's `commit` command when a commit must proceed despite polluted environment variables.
-- Use `uninstall-global-hook` to restore the previous global hooks path or remove the plugin-managed global hook.
+The earlier `git-human-author.sh` entry point remains as a compatibility path. Use `git-commit-author.sh` in new commands and generated hooks.
 
 ## Guardrails
 
-- Do not run plain `git commit` while this skill is active unless `install-repo-hook` or `install-global-hook` is in place, or the helper already emitted exports and they were applied in the same shell.
-- Do not set global git config from this skill unless the user explicitly asks.
-- Do not rewrite commits beyond `HEAD` without explicit user approval.
-- Do not preserve a user-provided `--author` argument that conflicts with the resolved identity.
+- Create commits through the helper unless a repository or global guard is installed.
+- Write global Git configuration only when the user explicitly asks for global protection.
+- Do not rewrite a commit older than `HEAD` without explicit user approval.
+- Reject a user-provided `--author` value that conflicts with the resolved identity.

@@ -1,78 +1,26 @@
-# Commit Author Guard
+# Git Commit Author
 
-Commit Author Guard is a Codex plugin that keeps git commits authored as the configured git user, or as the authenticated GitHub CLI account when git config is incomplete.
+Git Commit Author keeps a commit's author and committer set to the configured Git user. When Git configuration is incomplete, it can use the authenticated GitHub CLI account.
 
-An example GitHub repository that shows it in use is available below: 
+The repository remains at `https://github.com/frankischilling/codex-git-author`. The skill, command, hook messages, and configuration use the name `git-commit-author`.
 
-`https://github.com/frankischilling/codex-skill-test-repo`
+## Run the helper
 
-The plugin provides the `git-commit-author` skill and a bundled helper:
-
-```bash
-bash skills/git-commit-author/scripts/git-human-author.sh check
-bash skills/git-commit-author/scripts/git-human-author.sh commit -m "message"
-bash skills/git-commit-author/scripts/git-human-author.sh amend-head
-```
-
-To avoid calling the helper for every commit, install a guard hook once:
+The canonical entry point is `git-commit-author.sh`:
 
 ```bash
-# Current repository only.
-bash skills/git-commit-author/scripts/git-human-author.sh install-repo-hook
-
-# All repositories that use the user's global Git config.
-bash skills/git-commit-author/scripts/git-human-author.sh install-global-hook
+bash skills/git-commit-author/scripts/git-commit-author.sh check
+bash skills/git-commit-author/scripts/git-commit-author.sh commit -m "Update the guide"
+bash skills/git-commit-author/scripts/git-commit-author.sh amend-head
 ```
 
-The repo hook writes `.git/hooks/pre-commit`. The global hook writes a hook under `${XDG_CONFIG_HOME:-$HOME/.config}/codex-author-plugin/git-hooks` and points global `core.hooksPath` there. If a previous global hooks path exists, it is saved in `authorPlugin.previousHooksPath` and its `pre-commit` hook is chained when possible.
-
-Identity resolution order:
+Identity resolution follows this order:
 
 1. Repository `user.name` and `user.email`
 2. Global `user.name` and `user.email`
 3. `gh api user` and `gh api user/emails`
 
-The helper and installed hooks reject author or committer values containing `codex`, `openai`, or `chatgpt`. Hooks block bad commits; they cannot rewrite the parent `git commit` process environment.
-
-## Examples
-
-### Protect One Repository
-
-Run this from inside a git repository:
-
-```bash
-bash /home/frank/plugins/author-plugin/skills/git-commit-author/scripts/git-human-author.sh install-repo-hook
-```
-
-After that, normal commits are checked automatically:
-
-```bash
-git add README.md
-git commit -m "Update README"
-```
-
-If the commit environment says `Codex`, `OpenAI`, or `ChatGPT`, the pre-commit hook blocks the commit before it is created.
-
-### Protect All Repositories
-
-Install the global hook once:
-
-```bash
-bash /home/frank/plugins/author-plugin/skills/git-commit-author/scripts/git-human-author.sh install-global-hook
-```
-
-This sets global `core.hooksPath`, so future normal `git commit` commands are checked in any repo that uses the global Git config.
-
-### Use GitHub CLI fallback
-
-If git config is missing, the helper verifies the active GitHub CLI account and resolves your identity from it:
-
-```bash
-gh auth status
-bash /home/frank/plugins/author-plugin/skills/git-commit-author/scripts/git-human-author.sh resolve
-```
-
-The authentication check works with `gh` versions that do not support `gh auth status --active`. The helper uses `github.com` unless `GH_HOST` names another host.
+When fallback is needed, the helper verifies the active GitHub CLI account before reading its profile. The check works with CLI versions with and without `gh auth status --active`. It uses `github.com` unless `GH_HOST` names another host.
 
 If GitHub does not expose a public email, the helper uses GitHub's noreply address format:
 
@@ -80,50 +28,49 @@ If GitHub does not expose a public email, the helper uses GitHub's noreply addre
 123456+username@users.noreply.github.com
 ```
 
-### Prove A Bad Commit Is Blocked
+The helper rejects author or committer values containing `codex`, `openai`, or `chatgpt`. Its `commit` and `amend-head` commands replace polluted identity environment variables with the resolved identity.
 
-With the repo or global hook installed, this should fail:
+## Install a repository hook
+
+Install a guard for the current repository when plain `git commit` commands also need protection:
 
 ```bash
-GIT_AUTHOR_NAME=Codex \
-GIT_AUTHOR_EMAIL=codex@openai.com \
-GIT_COMMITTER_NAME=Codex \
-GIT_COMMITTER_EMAIL=codex@openai.com \
-git commit --allow-empty -m "bad author"
+bash skills/git-commit-author/scripts/git-commit-author.sh install-repo-hook
 ```
 
-Check the log after the failed command:
+The installer asks Git for the active hook path. This works in a normal checkout and a linked worktree, where hooks belong to the shared repository. If another pre-commit hook exists, the installer backs it up beside the resolved hook and calls it after the author guard. Reinstalling the guard keeps that chain intact.
+
+Hooks can block a bad commit, but they cannot change the environment of the parent `git commit` process. Use the helper's `commit` command when a commit must proceed from a polluted environment.
+
+## Install a global hook
+
+Install the guard for repositories that use the global Git configuration:
 
 ```bash
-git log --format='%h %an <%ae> | %cn <%ce> | %s' --max-count=5
+bash skills/git-commit-author/scripts/git-commit-author.sh install-global-hook
 ```
 
-No committed author or committer should contain `Codex`, `OpenAI`, or `ChatGPT`.
+The command stores its hook under `${XDG_CONFIG_HOME:-$HOME/.config}/git-commit-author/git-hooks` and points global `core.hooksPath` there. It preserves and chains an earlier global hooks path. Reinstallation compares normalized paths, so Git for Windows cannot turn the guard into a recursive self-chain by rewriting path syntax.
 
-### Force a safe commit from a polluted environment
-
-Hooks can block a polluted plain `git commit`, but they cannot rewrite the parent command's environment. When you need the commit to proceed anyway, use the helper's commit command:
+Remove the global guard and restore the previous hooks path with:
 
 ```bash
-GIT_AUTHOR_NAME=Codex \
-GIT_AUTHOR_EMAIL=codex@openai.com \
-GIT_COMMITTER_NAME=Codex \
-GIT_COMMITTER_EMAIL=codex@openai.com \
-bash /home/frank/plugins/author-plugin/skills/git-commit-author/scripts/git-human-author.sh commit -m "safe author"
+bash skills/git-commit-author/scripts/git-commit-author.sh uninstall-global-hook
 ```
 
-### Fix the latest bad commit
+## Use it with Git Human Workflow
 
-If `HEAD` is the only commit that has a bad author, amend it:
+When `git-human-workflow` is active, use that skill for every Git and GitHub command, including commits. Its `git commit` wrapper already forces the same resolved identity and also checks public text. Do not nest the two commit helpers.
+
+Git Commit Author remains useful on its own and as an existing hook guard. Git Human Workflow preserves and chains that hook. For a new setup using both skills, install only Git Human Workflow's repository hooks.
+
+## Compatibility with earlier names
+
+The old `git-human-author.sh` entry point remains available for existing installations. New documentation and generated hooks use `git-commit-author.sh`. Installing the global guard migrates `${XDG_CONFIG_HOME:-$HOME/.config}/codex-author-plugin/git-hooks` and `authorPlugin.previousHooksPath` to their `git-commit-author` names while preserving the earlier hook chain.
+
+## Development
 
 ```bash
-bash /home/frank/plugins/author-plugin/skills/git-commit-author/scripts/git-human-author.sh amend-head
-```
-
-Do not use this to rewrite shared history unless you intend to force-push or coordinate with other collaborators.
-
-To remove the global hook:
-
-```bash
-bash skills/git-commit-author/scripts/git-human-author.sh uninstall-global-hook
+python /path/to/skill-creator/scripts/quick_validate.py skills/git-commit-author
+bash tests/git-commit-author-test.sh
 ```
