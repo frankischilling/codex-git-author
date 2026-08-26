@@ -4,15 +4,28 @@ Git Commit Author keeps a commit's author and committer set to the configured Gi
 
 The repository remains at `https://github.com/frankischilling/codex-git-author`. The skill, command, hook messages, and configuration use the name `git-commit-author`.
 
-## Run the helper
+## Run from Linux Bash
 
-The canonical entry point is `git-commit-author.sh`:
+Use the Bash entry point on Linux:
 
 ```bash
 bash skills/git-commit-author/scripts/git-commit-author.sh check
 bash skills/git-commit-author/scripts/git-commit-author.sh commit -m "Update the guide"
 bash skills/git-commit-author/scripts/git-commit-author.sh amend-head
 ```
+
+## Run from Windows PowerShell
+
+The PowerShell entry point finds Git for Windows and runs the same checked implementation:
+
+```powershell
+$author = Resolve-Path 'skills/git-commit-author/scripts/git-commit-author.ps1'
+& $author check
+& $author commit -m 'Update the guide'
+& $author amend-head
+```
+
+The remaining commands use the same names, including `install-repo-hook`, `install-global-hook`, and `uninstall-global-hook`. Set `GIT_COMMIT_AUTHOR_BASH` only when Git for Windows is installed in a location the PowerShell entry point cannot find.
 
 Identity resolution follows this order:
 
@@ -73,4 +86,10 @@ The old `git-human-author.sh` entry point remains available for existing install
 ```bash
 python /path/to/skill-creator/scripts/quick_validate.py skills/git-commit-author
 bash tests/git-commit-author-test.sh
+```
+
+Run the native Windows test from PowerShell:
+
+```powershell
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File tests/git-commit-author-test.ps1
 ```

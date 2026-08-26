@@ -17,12 +17,22 @@ Follow the standalone workflow below when Git Human Workflow is not active.
 
 ## Standalone workflow
 
-Work from inside the target repository and use the canonical helper name:
+Work from inside the target repository. On Linux, use the Bash entry point:
 
 ```bash
 bash "<skill-path>/scripts/git-commit-author.sh" check
 bash "<skill-path>/scripts/git-commit-author.sh" commit -m "Update the guide"
 ```
+
+On Windows, use the PowerShell entry point. It accepts the same commands and arguments:
+
+```powershell
+$author = Resolve-Path '<skill-path>/scripts/git-commit-author.ps1'
+& $author check
+& $author commit -m 'Update the guide'
+```
+
+The PowerShell entry point finds Git for Windows. Set `GIT_COMMIT_AUTHOR_BASH` only when that Bash executable is installed in a location it cannot find.
 
 The `commit` command accepts normal `git commit` arguments and forces the resolved identity. Use it when hooks are absent or identity environment variables may be polluted.
 
